@@ -1,0 +1,32 @@
+#basic
+bind 0.0.0.0
+port placeholder
+daemonize yes
+pidfile {{ basedir }}_placeholder/data/redis.pid
+logfile {{ basedir }}_placeholder/log/redis.log
+masterauth {{ redis_password }}
+requirepass {{ redis_password }}
+
+#cluster
+cluster-enabled yes
+cluster-config-file nodes.conf
+cluster-node-timeout 5000
+cluster-require-full-coverage no
+
+#aof
+appendonly yes
+appendfsync everysec
+appendfilename "appendonly.aof"
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+no-appendfsync-on-rewrite yes
+
+#rdb
+save 900 1
+save 300 10
+save 60 10000
+dbfilename redis.rdb
+rdbcompression yes
+rdbchecksum yes
+stop-writes-on-bgsave-error no
+dir {{ basedir }}_placeholder/data

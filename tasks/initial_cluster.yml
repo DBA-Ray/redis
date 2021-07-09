@@ -1,0 +1,50 @@
+#initial and start redis server
+
+- name: Modify redis conf file for redis cluster
+  replace:
+    path: "{{ etcdir }}/redis.conf"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ item.replace }}"
+  with_items:
+    - { regexp: '#cluster-enabled yes', replace: 'cluster-enabled yes'}
+    - { regexp: '#cluster-config-file nodes.conf', replace: 'cluster-config-file nodes.conf'}
+    - { regexp: '#cluster-node-timeout 5000', replace: 'cluster-node-timeout 5000'}
+    - { regexp: '#cluster-require-full-coverage no', replace: 'cluster-require-full-coverage no'}
+
+- name: Start redis server
+  systemd:
+    name: "redis_{{ redis_port }}"
+    state: restarted
+
+- name: Rendering redis_auto_config.sh file
+  template:
+    src: redis_auto_config.sh.j2
+    dest: "{{ shelldir }}/redis_auto_config.sh"
+  when: groups.{{ deploy_hosts }}.index(inventory_hostname) == 0
+
+- name: Auto config redis
+  shell: "sh -x {{ shelldir }}/redis_auto_config.sh"
+  when: groups.{{ deploy_hosts }}.index(inventory_hostname) == 0
+
+- name: Obtain redis_cluster_servers
+  shell: "cat /tmp/redis_cluster_servers.txt"
+  register: redis_cluster_servers
+  when: groups.{{ deploy_hosts }}.index(inventory_hostname) == 0
+
+#- name: Initial redis cluster
+#  expect:
+#    command: "{{ prefixdir }}/bin/redis-cli --cluster create {{ redis_cluster_servers.stdout }} --cluster-replicas 1 -a '{{ redis_password }}' -p {{ redis_port }}"
+#    responses:
+#      (?i)configuration: yes
+#    echo: yes
+#  no_log: False
+#  when: groups.{{ deploy_hosts }}.index(inventory_hostname) == 0
+
+- name: Initial redis cluster
+  debug:
+    msg: "{{ prefixdir }}/bin/redis-cli --cluster create {{ redis_cluster_servers.stdout }} --cluster-replicas 1 -a '{{ redis_password }}' -p {{ redis_port }}"
+  when: groups.{{ deploy_hosts }}.index(inventory_hostname) == 0
+
+- name: Persistence command
+  shell: "echo {{ prefixdir }}/bin/redis-cli --cluster create {{ redis_cluster_servers.stdout }} --cluster-replicas 1 -a /'{{ redis_password }}/' -p {{ redis_port }} >> /tmp/redis_cluster_config.txt"
+  when: groups.{{ deploy_hosts }}.index(inventory_hostname) == 0

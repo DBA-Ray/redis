@@ -1,0 +1,198 @@
+#initial and start redis server
+
+- name: Stop redis server
+  systemd:
+    name: "redis_{{ item }}"
+    state: stopped
+  tags: shutdown
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+  when: whether_uninstall
+
+- name: Remove existing redis directory
+  file:
+    path: "{{ basedir }}_{{ item }}"
+    state: absent
+    remote_src: 'True'
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+  when: whether_uninstall
+
+- name: Create directories for redis
+  file: path={{ item }} state=directory owner=redis group=redis
+  with_items:
+    - "{{ shelldir }}"
+    - "{{ monitordir }}"
+    - "{{ backupdir }}"
+    - "{{ packagedir }}"
+
+- name: Create data directories for redis
+  file: path="{{ basedir }}_{{ item }}/data" state=directory owner=redis group=redis
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Create log directories for redis
+  file: path="{{ basedir }}_{{ item }}/log" state=directory owner=redis group=redis
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Download the package
+  get_url:
+    url: "{{ item }}"
+    dest: "{{ packagedir }}"
+  with_items: 
+    - "{{ download_url }}"
+  register: result
+  retries: 7
+  until: result is succeeded
+
+- name: Uncompress redis package to package dir
+  unarchive:
+    src: "{{ packagedir }}/{{ package_name }}"
+    dest: "{{ packagedir }}/"
+    remote_src: yes
+
+- name: Add the redis execution path to the environment variable and enable gcc
+  lineinfile:
+    path: /etc/profile
+    line: "{{ item }}"
+    insertafter: EOF
+    state: present
+  with_items:
+    - 'echo "source /opt/rh/devtoolset-9/enable"'
+    - 'export PATH=/usr/local/redis/bin:$PATH'
+
+- name: Build redis to "/usr/local/redis"
+  make:
+    chdir: "{{ packagedir }}/{{ redis_version }}"
+    target: install
+    params:
+      PREFIX: "/usr/local/redis"
+
+- name: Rendering redis cluster parameter file
+  template:
+    src: redis_cluster.conf.j2
+    dest: "{{ basedir }}_{{ item }}/data/redis.conf"
+    owner: redis
+    group: redis
+    mode: 0660
+  with_items:
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Modify redis cluster parameter file
+  replace:
+    path: "{{ basedir }}_{{ item }}/data/redis.conf"
+    regexp: placeholder
+    replace: "{{ item }}"
+  with_items:
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Rendering redis stop bash file
+  template:
+    src: redis-shutdown.j2
+    dest: "/usr/libexec/redis-shutdown_{{ item }}"
+    owner: redis
+    group: redis
+    mode: 0744
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Modify redis stop bash file
+  replace:
+    path: "/usr/libexec/redis-shutdown_{{ item }}"
+    regexp: placeholder
+    replace: "{{ item }}"
+  with_items:
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Rendering redis.server file
+  template:
+    src: redis.service.j2
+    dest: "/usr/lib/systemd/system/redis_{{ item }}.service"
+    owner: redis
+    group: redis
+    mode: 0644
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Modify redis.server file for startning
+  lineinfile:
+    dest: "/usr/lib/systemd/system/redis_{{ item }}.service"
+    regexp: ^ExecStart=/usr/local/redis/bin/redis-server /etc/redis.conf --supervised systemd
+    line: "ExecStart=/usr/local/redis/bin/redis-server {{ basedir }}_{{ item }}/data/redis.conf --supervised systemd"
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Modify redis.server file for stopping
+  lineinfile:
+    dest: "/usr/lib/systemd/system/redis_{{ item }}.service"
+    regexp: ^ExecStop=/usr/libexec/redis-shutdown
+    line: "ExecStop=/usr/libexec/redis-shutdown_{{ item }}"
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Force systemd to reread configs
+  systemd:
+    daemon_reload: yes
+
+- name: Clean system's buffer and cache
+  sysctl:
+    name: vm.drop_caches
+    value: '1'
+    state: present
+
+- name: Start redis server
+  systemd:
+    name: "redis_{{ item }}"
+    state: started
+  tags: startup
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Enable redis server
+  systemd:
+    name: "redis_{{ item }}"
+    enabled: yes
+  with_items: 
+    - "{{ redis_port }}"
+    - "{{ redis_slave_port }}"
+
+- name: Rendering redis_auto_config.sh file
+  template:
+    src: redis_auto_config.sh.j2
+    dest: "{{ shelldir }}/redis_auto_config.sh"
+
+- name: Auto config redis
+  shell: "sh -x {{ shelldir }}/redis_auto_config.sh"
+
+- name: Obtain redis_cluster_servers
+  shell: "cat /tmp/redis_cluster_servers.txt"
+  register: redis_cluster_servers
+
+- name: Source profile
+  shell: "source /etc/profile"
+
+#- name: Initial redis cluster
+#  expect:
+#    command: "/usr/local/redis/bin/redis-cli --cluster create {{ redis_cluster_servers.stdout }} --cluster-replicas 1 -a '{{ redis_password }}' -p {{ redis_port }}"
+#    responses:
+#      (?i)configuration: yes
+#    echo: yes
+#  no_log: False
+#  when: groups.{{ deploy_hosts }}.index(inventory_hostname) == 0
+
+- name: Initial redis cluster
+  debug:
+    msg: "/usr/local/redis/bin/redis-cli --cluster create {{ redis_cluster_servers.stdout }} --cluster-replicas 1 -a '{{ redis_password }}' -p {{ redis_port }}"

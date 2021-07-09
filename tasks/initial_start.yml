@@ -1,0 +1,139 @@
+#initial and start redis server
+
+- name: Create directories for redis
+  file: path={{ item }} state=directory owner=redis group=redis
+  with_items:
+    - "{{ shelldir }}"
+    - "{{ monitordir }}"
+    - "{{ backupdir }}"
+    - "{{ packagedir }}"
+    - "{{ sentineldir }}"
+    - "{{ datadir }}"
+    - "{{ piddir }}"
+    - "{{ etcdir }}"
+    - "{{ logdir }}"
+
+- name: Download the package
+  get_url:
+    url: "{{ item }}"
+    dest: "{{ packagedir }}"
+  with_items: 
+    - "{{ download_url }}"
+    - "{{ redis_shake_url }}"
+  register: result
+  retries: 7
+  until: result is succeeded
+
+- name: Uncompress redis package and redis-shake package to package dir
+  unarchive:
+    src: "{{ packagedir }}/{{ package_name }}"
+    dest: "{{ packagedir }}/"
+    remote_src: yes
+  with_items:
+    - "{{ packagedir }}/{{ package_name }}"
+    - "{{ packagedir }}/redis-shake-v{{ redis_shake_version }}"
+
+- name: Copy redis-shake file
+  copy:
+    src: "{{ packagedir }}/redis-shake-v{{ redis_shake_version }}/redis-shake.linux"
+    dest: "{{ backupdir }}/redis-shake"
+    owner: redis
+    group: redis
+    mode: 0744
+    remote_src: yes
+
+- name: Rendering redis-shake config parameter file
+  template:
+    src: redis-shake.conf.j2
+    dest: "{{ backupdir }}/redis-shake.conf"
+    owner: redis
+    group: redis
+    mode: 0660
+
+- name: Add the job for backuping redis
+  cron:
+    name: "logrotate"
+    minute: "0"
+    hour: "1"
+    job: "{{ backupdir }}/redis-shake -type=dump -conf={{ backupdir }}/redis-shake.conf > /dev/null 2>&1 &"
+
+- name: Add the redis execution path to the environment variable and enable gcc
+  lineinfile:
+    path: /etc/profile
+    line: "{{ item }}"
+    insertafter: EOF
+    state: present
+  with_items:
+    - 'echo "source /opt/rh/devtoolset-9/enable"'
+    - "export PATH={{ prefixdir }}/bin:$PATH"
+
+- name: Source profile
+  shell: "source /etc/profile"
+
+- name: Build redis to "prefixdir"
+  make:
+    chdir: "{{ packagedir }}/{{ redis_version }}"
+    target: install
+    params:
+      PREFIX: "{{ prefixdir }}"
+
+- name: Rendering sentinel config parameter file
+  template:
+    src: sentinel.conf.j2
+    dest: "{{ sentineldir }}/sentinel.conf"
+    owner: redis
+    group: redis
+    mode: 0660
+
+- name: Rendering sentinel.server file
+  template:
+    src: sentinel.service.j2
+    dest: "/usr/lib/systemd/system/sentinel_{{ sentinel_port }}.service"
+    owner: redis
+    group: redis
+    mode: 0644    
+
+- name: Rendering redis config parameter file
+  template:
+    src: redis.conf.j2
+    dest: "{{ etcdir }}/redis.conf"
+    owner: redis
+    group: redis
+    mode: 0660
+
+- name: Rendering redis.server file
+  template:
+    src: redis.service.j2
+    dest: "/usr/lib/systemd/system/redis_{{ redis_port }}.service"
+    owner: redis
+    group: redis
+    mode: 0644
+
+- name: Rendering redis stop bash file
+  template:
+    src: redis-shutdown.j2
+    dest: "/usr/libexec/redis-shutdown_{{ redis_port }}"
+    owner: redis
+    group: redis
+    mode: 0744
+
+- name: Force systemd to reread configs
+  systemd:
+    daemon_reload: yes
+
+- name: Clean system's buffer and cache
+  sysctl:
+    name: vm.drop_caches
+    value: '1'
+    state: present
+
+- name: Start redis server
+  systemd:
+    name: "redis_{{ redis_port }}"
+    state: started
+  tags: startup
+
+- name: Enable redis server
+  systemd:
+    name: "redis_{{ redis_port }}"
+    enabled: yes

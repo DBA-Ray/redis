@@ -1,0 +1,9 @@
+#!/bin/bash
+
+redis_master=`cat /etc/hosts|grep redis|grep {{ env }}|awk '{print $2}'|awk '{print $0":{{ redis_port }}"}'|awk BEGIN{RS=EOF}'{gsub(/\n/," ");print}'`
+
+redis_slave=`cat /etc/hosts|grep redis|grep {{ env }}|awk '{print $2}'|awk '{print $0":{{ redis_slave_port }}"}'|awk BEGIN{RS=EOF}'{gsub(/\n/," ");print}'`
+
+redis_cluster_servers="${redis_master} ${redis_slave}"
+
+echo ${redis_cluster_servers} > /tmp/redis_cluster_servers.txt

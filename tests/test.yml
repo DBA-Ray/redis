@@ -1,0 +1,13 @@
+---
+- hosts: "{{ deploy_hosts }}"
+  remote_user: root
+  vars:
+    is_standalone: True
+    is_cluster: False
+    is_replica: True
+    redis_port: 8000 # Change this variable for deploy redis and see /tmp/redis_cluster_servers.txt to config redis cluster
+    redis_slave_port: "{{ redis_port + 1 }}"
+    is_shard_cluster: False # Every master redis and slave redis share one server.It does not rely on standalone.  
+    whether_uninstall: False # Whether to uninstall the original service and then install it
+  roles:
+    - dba_ray.redis

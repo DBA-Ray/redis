@@ -1,0 +1,69 @@
+- name: Install base packages
+  yum:
+    name: "{{ packages }}"
+    state: latest
+
+- name: Install gcc compilation related
+  yum:
+    name: "{{ gcc }}"
+  vars: 
+    gcc:
+    - devtoolset-9-gcc.x86_64
+    - devtoolset-9-gcc-gdb-plugin.x86_64
+    - devtoolset-9-gcc-gfortran.x86_64
+    - devtoolset-9-gcc-plugin-devel.x86_64
+    state: latest
+
+- name: Install pexpect
+  pip:
+    name: pexpect
+    state: latest
+
+- name: Disable kernel hugepage
+  shell: "echo never > /sys/kernel/mm/transparent_hugepage/enabled;echo never > /sys/kernel/mm/transparent_hugepage/defrag"
+
+- name: Set parameters to the "/etc/sysctl.conf" for redis
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+    state: present
+    reload: yes
+    sysctl_file: /etc/sysctl.conf
+  with_items:
+    - { name: 'net.core.somaxconn', value: 8192 }
+    - { name: 'vm.overcommit_memory', value: 1 }
+
+- name: Add or modify all nofile limits for wildcard domain
+  pam_limits:
+    domain: '*'
+    limit_type: "{{ item }}"
+    limit_item: nofile
+    value: 65535
+  with_items:
+    - hard
+    - soft
+
+- name: Ensure group "redis" exists
+  group:
+    name: redis
+    state: present
+
+- name: Ensure the user "redis" exists
+  user:
+    name: redis
+    group: redis
+
+- name: Stop redis server
+  systemd:
+    name: "redis_{{ redis_port }}"
+    state: stopped
+  tags: shutdown
+  when: whether_uninstall
+
+- name: Remove existing redis directory
+  file:
+    path: "{{ basedir }}"
+    state: absent
+    remote_src: 'True'
+  when: whether_uninstall

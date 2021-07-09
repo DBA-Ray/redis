@@ -1,0 +1,30 @@
+#initial redis replicas
+
+- name: Modify redis conf file for redis replicas
+  replace:
+    path: "{{ etcdir }}/redis.conf"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ item.replace }}"
+  with_items:
+    - { regexp: "#replicaof {{ master_hostname }} {{ master_port }}", replace: "replicaof {{ master_hostname }} {{ master_port }}" }
+  when: ansible_hostname != "{{ master_hostname }}"
+
+- name: Restart redis master server
+  systemd:
+    name: "redis_{{ redis_port }}"
+    state: restarted
+  when: ansible_hostname == "{{ master_hostname }}"
+
+- name: Wait for redis master is running
+  pause: seconds=3
+
+- name: Restart redis slave server
+  systemd:
+    name: "redis_{{ redis_port }}"
+    state: restarted
+  when: ansible_hostname != "{{ master_hostname }}"
+
+- name: Start sentinel server
+  systemd:
+    name: "sentinel_{{ sentinel_port }}"
+    state: started

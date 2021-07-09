@@ -1,0 +1,20 @@
+---
+# tasks file for dba_ray.redis
+
+- include: password.yml
+  when: ( is_standalone | default(False) ) or ( is_shard_cluster | default(False) )
+
+- include: system_check.yml
+  when: ( is_standalone | default(False) ) or ( is_shard_cluster | default(False) )
+
+- include: initial_start.yml
+  when: ( is_standalone | default(False) ) or ( is_cluster | default(False) ) or ( is_replica | default(False) )
+
+- include: initial_cluster.yml
+  when: is_cluster | default(False)
+
+- include: initial_replica.yml
+  when: is_replica | default(False)
+
+- include: initial_shard_cluster.yml
+  when: is_shard_cluster | default(False)

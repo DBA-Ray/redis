@@ -1,0 +1,25 @@
+---
+# vars file for dba_ray.redis
+packages:
+  - vim
+  - lrzsz
+  - telnet
+  - net-tools
+  - tree
+  - unzip
+  - libaio
+  - numactl
+  - expect
+  - epel-release
+  - python-pip
+  - python2-pip.noarch
+  - openssl
+  - zstd
+  - ruby
+  - rubygems
+  - centos-release-scl
+#  - PyOpenSSL
+#  - python3
+
+vars_files:
+  - secrets.yml

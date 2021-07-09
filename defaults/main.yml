@@ -1,0 +1,32 @@
+---
+# defaults file for dba_ray.redis
+env: test
+# Which hosts to deploy
+deploy_hosts: "redis_{{ env }}"
+# Basic parameters
+redis_port: 8000
+redis_slave_port: "{{ redis_port + 1 }}"
+master_hostname: redis1_testa
+master_port: "{{ redis_port }}"
+sentinel_port: 26379
+# Directory path
+redis_upgrade_version: redis-5.0.8
+redis_upgrade_package: "{{ redis_upgrade_version }}.tar.gz"
+redis_version: redis-5.0.8
+package_name: "{{ redis_version }}.tar.gz"
+download_url: "http://download.redis.io/releases/{{ package_name }}"
+redis_shake_version: 2.0.3
+redis_shake_url: "https://github.com/alibaba/RedisShake/releases/download/release-v{{ redis_shake_version }}-20200724/redis-shake-v{{ redis_shake_version }}.tar.gz"
+fstab_src: /dev/vdb
+prefixdir: /usr/local/redis
+install_dir: /data
+sentineldir: "{{ install_dir }}/sentinel_{{ sentinel_port }}"
+basedir: "{{ install_dir }}/redis_{{ redis_port }}"
+shelldir: "{{ install_dir }}/shell"
+monitordir: "{{ install_dir }}/monitor"
+backupdir: "{{ install_dir }}/backup"
+packagedir: "{{ install_dir }}/package"
+datadir: "{{ basedir }}/data"
+piddir: "{{ basedir }}/pid"
+etcdir: "{{ basedir }}/etc"
+logdir: "{{ basedir }}/log"
