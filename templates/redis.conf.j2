@@ -16,7 +16,7 @@ maxclients 50000
 timeout 0
 
 #memory
-maxmemory {{ (ansible_memtotal_mb * 3) // 4096 }}gb
+maxmemory {{ ansible_memtotal_mb / 1024 * 3 // 4 }}gb
 maxmemory-policy volatile-lru
 
 #lazyfree
